@@ -1,0 +1,97 @@
+description: 5 pop with archaic migration
+time_units: generations
+generation_time: 1
+doi: ['https://www.nature.com/articles/s41467-021-26503-5/figures/6']
+metadata:
+  sampled_demes: ['Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan']
+demes:
+- name: ancestral
+  description: Equilibrium/root population
+  start_time: .inf
+  ancestors: []
+  proportions: []
+  epochs:
+  - {end_time: 5920.0, start_size: 7310, end_size: 7310, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: AMH
+  description: Anatomically modern humans
+  start_time: 5920.0
+  ancestors: [ancestral]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 3000.0, start_size: 19053.78515625, end_size: 19053.78515625, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: OOA
+  description: Bottleneck out-of-Africa population
+  start_time: 3000.0
+  ancestors: [AMH]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 2000.0, start_size: 4317.021484375, end_size: 4317.021484375, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: Yoruba
+  description: African population
+  start_time: 3000.0
+  ancestors: [AMH]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 0.0, start_size: 20673.0390625, end_size: 20673.0390625, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: French
+  description: European population
+  start_time: 2000.0
+  ancestors: [OOA]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 0.0, start_size: 4440.43701171875, end_size: 22714.84765625, size_function: exponential,
+    selfing_rate: 0, cloning_rate: 0}
+- name: Papuan
+  description: Papuan
+  start_time: 2000.0
+  ancestors: [OOA]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 0.0, start_size: 2394.937744140625, end_size: 4582.53466796875, size_function: exponential,
+    selfing_rate: 0, cloning_rate: 0}
+- name: NeaDenAnc
+  description: Bottleneck out-of-Africa population
+  start_time: 12500.0
+  ancestors: [ancestral]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 9150.0, start_size: 5014.166015625, end_size: 5014.166015625, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: NeanderthalGHOST
+  description: ''
+  start_time: 9150.0
+  ancestors: [NeaDenAnc]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 500.0, start_size: 5803.21142578125, end_size: 5803.21142578125, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: Vindija
+  description: ''
+  start_time: 2100.0
+  ancestors: [NeanderthalGHOST]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 2000.0, start_size: 29.492040634155273, end_size: 29.492040634155273,
+    size_function: constant, selfing_rate: 0, cloning_rate: 0}
+- name: DenisovanGHOST
+  description: ''
+  start_time: 9150.0
+  ancestors: [NeaDenAnc]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 500.0, start_size: 6040.51220703125, end_size: 6040.51220703125, size_function: constant,
+    selfing_rate: 0, cloning_rate: 0}
+- name: Denisovan
+  description: ''
+  start_time: 2600.0
+  ancestors: [DenisovanGHOST]
+  proportions: [1.0]
+  epochs:
+  - {end_time: 2500.0, start_size: 26.48869514465332, end_size: 26.48869514465332,
+    size_function: constant, selfing_rate: 0, cloning_rate: 0}
+migrations: []
+pulses: []
