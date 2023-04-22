@@ -1,0 +1,76 @@
+description: 5 pop with archaic migration
+time_units: generations
+metadata: {
+  sampled_demes: ['Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan'],
+  sample_sizes: [214, 56, 30, 2, 2]
+}
+doi:
+- https://www.nature.com/articles/s41467-021-26503-5/figures/6
+demes:
+
+- name: ancestral
+  description: Equilibrium/root population
+  epochs:
+  - {end_time: 5920, start_size: 7310}
+
+- name: AMH
+  description: Anatomically modern humans
+  ancestors: [ancestral]
+  epochs:
+  - {end_time: 3000, start_size: 14474}
+
+- name: OOA
+  description: Bottleneck out-of-Africa population
+  ancestors: [AMH]
+  epochs:
+  - {end_time: 1700, start_size: 1861}
+
+- name: Yoruba
+  description: African population
+  ancestors: [AMH]
+  epochs:
+  - start_size: 14474
+
+- name: French
+  description: European population
+  ancestors: [OOA]
+  epochs:
+  - {start_size: 1734, end_size: 34039}
+
+- name: Papuan
+  description: Papuan
+  ancestors: [OOA]
+  epochs:
+  - {start_size: 1000, end_size: 34039}
+
+- name: NeaDenAnc
+  description: Bottleneck out-of-Africa population
+  ancestors: [ancestral]
+  start_time: 16000
+  epochs:
+  - {end_time: 14000, start_size: 5000}
+
+- name: NeanderthalGHOST
+  ancestors: [NeaDenAnc]
+  epochs:
+  - {end_time: 1000, start_size: 5000}
+
+- name: Vindija
+  start_time: 4000
+  ancestors: [NeanderthalGHOST]
+  epochs:
+  - {end_time: 2000, start_size: 500}
+
+- name: DenisovanGHOST
+  ancestors: [NeaDenAnc]
+  epochs:
+  - {end_time: 1000, start_size: 5000}
+
+- name: Denisovan
+  start_time: 4000
+  ancestors: [DenisovanGHOST]
+  epochs:
+  - {end_time: 2500, start_size: 500}
+# pulses:
+# - {sources: [Neanderthal_GHOST], dest: Sardinian, proportions: [0.1], time: 2250} 
+# - {sources: [Denisovan_GHOST], dest: Papuan, proportions: [0.1], time: 1000} 
