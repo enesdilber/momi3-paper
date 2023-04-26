@@ -6,18 +6,18 @@ from ast import literal_eval
 from tqdm import trange
 
 loc = lambda i: f"/mnt/turbo/eneswork/Unified_genome//hgdp_tgp_sgdp_high_cov_ancients_chr{i}_p.dated.trees"
-NAME = "UNIF"
+NAME = "UNIF_chr20"
 
 deme_ids = {'Yoruba': 64, 'French': 16, 'Papuan': 175, 'Vindija': 214, 'Denisovan': 213}
 sampled_demes = ('Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan')
-sample_sizes = {'Yoruba': 10, 'French': 10, 'Papuan': 10, 'Vindija': 2, 'Denisovan': 2}
+sample_sizes = {'Yoruba': 300, 'French': 300, 'Papuan': 300, 'Vindija': 300, 'Denisovan': 300}
 SEED = 108
 
 p = len(sampled_demes)
 
 np.random.seed(SEED)
 
-for i in trange(1, 23):
+for i in trange(20, 21):#3):
 	try:
 		ts = tskit.load(loc(i))
 		tspops = ts.populations()

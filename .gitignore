@@ -1,0 +1,10 @@
+slurm_performance_tests/out_files_timeit
+slurm_performance_tests/timing_tests_out
+slurm_performance_tests/timing_bound_sampler
+*.pyc
+TmpNotebook*
+*__pycache__*
+.ipynb*
+fwdpy11sims/fwdpy11_simulations_with_slurm.ipynb
+Admixture.ipynb
+migration.ipynb

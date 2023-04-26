@@ -10,6 +10,7 @@ from momi3.optimizers import optax_for_momi
 import pickle
 import demes
 import optax
+import tskit
 
 import numpy as np
 import jax.numpy as jnp
@@ -56,19 +57,19 @@ def get_srun(proc):
         "#mem-per-cpu=None",
         "#nodes=1",
         "#cpus-per-task=1",
-        "#mem=16G",
+        "#mem=36G",
         "#gpus-per-node=1",
-        "#partition=spgpu",
+        "#partition=gpu",
         '#job-name="GPU_arc"',
         "module load cudnn",
         "module load cuda"
     )
 
-    mem = 3000
+    mem = 1000
     time = "0-10:00:00"
     srun_CPU = slurm.batch(
         f'#mem-per-cpu={mem}',
-        '#cpus-per-task=20',
+        '#cpus-per-task=16',
         f'#time={time}',
         '#job-name="CPU_arc"'
     )
@@ -91,6 +92,8 @@ def get_demo(model):
         dbuilder.add_pulse(sources=['NeanderthalGHOST'], dest='OOA', proportions=[0.05], time=2500)
         dbuilder.add_pulse(sources=['DenisovanGHOST'], dest='Papuan', proportions=[0.025], time=1000)
         demo = dbuilder.resolve()
+    elif model == 'inferred':
+        demo = demes.load('arc5_pulse_inferred.yaml')
     else:
         raise ValueError(f'Unknown {model=}')
     return demo
@@ -127,6 +130,78 @@ def send_job(arg_d, mode='run'):
     sleep(0.05)
 
 
+def get_sfs(SEED, sampled_demes, sample_sizes, TS):
+    deme_ids = {'Yoruba': 64, 'French': 16, 'Papuan': 175, 'Vindija': 214, 'Denisovan': 213}
+    np.random.seed(SEED)
+    for ts in TS:
+        samples = []
+        for pop in sampled_demes:
+            deme_id = deme_ids[pop]
+            samp = ts.samples(deme_id)
+            n = sample_sizes[pop]
+            n_deme = min(len(samp), n)
+            samples.append(np.random.choice(samp, size=n_deme, replace=False))
+        AFS = ts.allele_frequency_spectrum(samples, polarised=True, span_normalise=False)
+
+        try:
+            X += AFS
+        except:
+            X = AFS
+    
+    return X
+
+
+def f_small_sample_bootstrap():
+    loc = lambda i: f"../../../Unified_genome/hgdp_tgp_sgdp_high_cov_ancients_chr{i}_p.dated.trees"
+    TS = []
+    for i in range(1, 22):
+        try:
+            ts = tskit.load(loc(i))
+            TS.append(ts)
+        except:
+            pass
+
+    sampled_demes = ('Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan')
+    sample_sizes = {'Yoruba': 6, 'French': 6, 'Papuan': 6, 'Vindija': 2, 'Denisovan': 2}
+
+    demo = demes.load('arc5_pulse_inferred.yaml')
+    ss = [sample_sizes[pop] for pop in sampled_demes]
+
+    momi = Momi(demo, sampled_demes, ss, jitted=True, batch_size=3090)
+    params = momi._default_params
+    params.set_train_all_etas(True)
+    params.set_train_all_pis(True)
+    params.set_train('eta_0', False) # Ancestral pop size is not inferred
+    
+    bs_iter = 100
+    niter = 800
+
+    histories = []
+
+    for i in range(bs_iter):
+        jsfs = get_sfs(i, sampled_demes, sample_sizes, TS)
+
+        transformed = False
+        theta_train_dict = params.theta_train_dict(transformed)
+        lr_vec = get_lr_vector(theta_train_dict, {'lr_eta': 1., 'lr_pi': 0.001})
+        optimizer = optax.adabelief(learning_rate=lr_vec, b1=0.3, b2=0.1)
+
+        theta_train_dict, opt_state, history = optax_for_momi(
+            optimizer,
+            momi,
+            params,
+            jsfs,
+            niter=niter,
+            transformed=transformed,
+            theta_train_dict=theta_train_dict,
+        )
+        
+        histories.append(history)
+
+        with open('bs_small_sample2.pickle', 'wb') as f:
+            pickle.dump(histories, f)
+
+
 if __name__ == "__main__":
     # For sending GL_jobs: python bootstrap.py out=/tmp/ mode=send_jobs njobs=50 proc=GPU or (CPU)
     # For sending bootstrap iter: python out=/tmp/ mode=run
@@ -149,7 +224,8 @@ if __name__ == "__main__":
         'proc': 'CPU',
         'njobs': 'None',
         'file_name': 'None',
-        'q': '0.99'
+        'q': '0.99',
+        'batch_size': 'None'
     }
 
     for arg in args:
@@ -169,8 +245,11 @@ if __name__ == "__main__":
         os.mkdir(out_dir)
 
     if mode == 'send_job_bootstrap':
+        file_name = arg_d['file_name']
         for i in range(int(arg_d['njobs'])):
             arg_d['seed'] = f'{i}'
+            name, _ = file_name.split('.pickle')
+            arg_d['file_name'] = f"{name}{i}.pickle"
             send_job(arg_d)
 
     elif mode == 'send_job_lr':
@@ -186,6 +265,13 @@ if __name__ == "__main__":
             mode = 'run'
         send_job(arg_d, mode)
 
+    elif mode == 'small_sample':
+        f_small_sample_bootstrap()
+    elif mode == 'small_sample_job':
+        srun = get_srun('GPU')
+        test = f'python train.py mode=small_sample'
+        jobid = srun.run(test)
+        print(f"{jobid}: Sent -- {test}")
     else:
         print(arg_d)
         # prms
@@ -227,7 +313,12 @@ if __name__ == "__main__":
         demo = get_demo(model)
         sampled_demes = demo.metadata['sampled_demes']
         sample_sizes = [i - 1 for i in jsfs.shape]
-        momi = Momi(demo, sampled_demes, sample_sizes, jitted=True, batch_size=152000, low_memory=True)
+        if arg_d['batch_size'] == 'None':
+            momi = Momi(demo, sampled_demes, sample_sizes, jitted=True)
+        else:
+            batch_size = int(arg_d['batch_size'])
+            momi = Momi(demo, sampled_demes, sample_sizes, jitted=True, batch_size=batch_size, low_memory=True)
+
         params = get_params(momi, train_pars)
         if bound_sampler:
             bounds = momi.bound_sampler(params, 10000, min_lineages=2, seed=108, quantile=0.999)
@@ -238,7 +329,7 @@ if __name__ == "__main__":
 
         theta_train_dict = params.theta_train_dict(transformed)
         lr_vec = get_lr_vector(theta_train_dict, arg_d)
-        optimizer = optax.adabelief(learning_rate=lr_vec)
+        optimizer = optax.adabelief(learning_rate=lr_vec, b1=0.3, b2=0.1)
         if mode == 'runmore':
             with open(out_path, 'rb') as f:
                 ret = pickle.load(f)
@@ -254,20 +345,29 @@ if __name__ == "__main__":
 
         print(jsfs.shape)
         print(jsfs.sum())
-        theta_train_dict, opt_state, history = optax_for_momi(
-            optimizer,
-            momi,
-            params,
-            jsfs,
-            niter=niter,
-            transformed=transformed,
-            theta_train_dict=theta_train_dict,
-            opt_state=opt_state,
-            history=history
-        )
-        ret = {'ttd': theta_train_dict, 'opt_state': opt_state, 'history': history}
 
-        with open(out_path, 'wb') as f:
-            pickle.dump(ret, f)
+        run_left = niter
+        every_x_iter = 100
+
+        while(run_left > 0):
+            theta_train_dict, opt_state, history = optax_for_momi(
+                optimizer,
+                momi,
+                params,
+                jsfs,
+                niter=every_x_iter,
+                transformed=transformed,
+                theta_train_dict=theta_train_dict,
+                opt_state=opt_state,
+                history=history
+            )
+            ret = {'ttd': theta_train_dict, 'opt_state': opt_state, 'history': history}
+
+            with open(out_path, 'wb') as f:
+                pickle.dump(ret, f)
+
+            run_left = run_left - every_x_iter
+
+            print(theta_train_dict)
 
         print(f'saved: {out_path}')
