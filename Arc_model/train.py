@@ -4,19 +4,22 @@ import os
 
 from momi3.MOMI import Momi
 from momi3.Params import Params
-from momi3.utils import bootstrap_sample
+from momi3.utils import bootstrap_sample, tqdm
 from momi3.optimizers import optax_for_momi
 
 import pickle
 import demes
 import optax
 import tskit
+import moments
 
 import numpy as np
 import jax.numpy as jnp
+import numdifftools as nd
 
 from scipy import optimize
 from time import sleep
+from time import time
 
 model_name = 'arc5'
 
@@ -57,9 +60,9 @@ def get_srun(proc):
         "#mem-per-cpu=None",
         "#nodes=1",
         "#cpus-per-task=1",
-        "#mem=36G",
+        "#mem=48G",
         "#gpus-per-node=1",
-        "#partition=gpu",
+        "#partition=spgpu",
         '#job-name="GPU_arc"',
         "module load cudnn",
         "module load cuda"
@@ -94,6 +97,13 @@ def get_demo(model):
         demo = dbuilder.resolve()
     elif model == 'inferred':
         demo = demes.load('arc5_pulse_inferred.yaml')
+    elif model == 'inferred_plus_migration':
+        demo = demes.load('arc5_pulse_inferred.yaml')
+        dd = demo.asdict()
+        b = demes.Builder.fromdict(dd)
+        b.add_migration(source='AMH', dest='NeanderthalGHOST', rate=0.001)
+        b.add_migration(source='NeanderthalGHOST', dest='AMH', rate=0.01)
+        demo = b.resolve()
     else:
         raise ValueError(f'Unknown {model=}')
     return demo
@@ -151,6 +161,58 @@ def get_sfs(SEED, sampled_demes, sample_sizes, TS):
     return X
 
 
+def f_migration_grid(hess=False):
+    demo = get_demo('inferred_plus_migration')
+    jsfs = np.load('jsfs_UNIF_Yoruba_French_Papuan_Vindija_Denisovan_3419145_108.npy')
+    sampled_demes = ('Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan')
+    sample_sizes = [i - 1 for i in jsfs.shape]
+
+    momi = Momi(demo, sampled_demes, sample_sizes, jitted=True)
+    params = Params(momi)
+    bounds = momi.bound_sampler(params, 10000, min_lineages=4, quantile=0.99)
+    momi = momi.bound(bounds)
+
+    bs_jsfs = momi._bootstrap_sample(jsfs, int(1e6), seed=108)
+
+    if hess:
+        params.set_train('rho_0', True)
+        params.set_train('rho_1', True)
+        for i in tqdm([1, 2]):
+            print(momi.loglik_with_gradient(params, bs_jsfs))
+
+        def f(rho):
+            print(rho)
+            params.set('rho_0', rho[0])
+            params.set('rho_1', rho[1])
+            return momi.loglik(params, bs_jsfs)
+
+        rho = [1.2508442281550083e-05, 2.2409018563948744e-05]
+        H = nd.Hessian(f, step=1e-6)(rho)
+        print(H)
+    else:
+        mle_rho0 = 1.2508442281550083e-05
+        mle_rho1 = 2.2409018563948744e-05
+        s_rho0 = 1.06904497e-06
+        s_rho1 = 3.71390676e-07
+
+        Z = 7
+        rho0s = np.linspace(mle_rho0 - Z * s_rho0, mle_rho0 + Z * s_rho0, 11)
+        rho1s = np.linspace(mle_rho1 - Z * s_rho1, mle_rho1 + Z * s_rho1, 11)
+
+        Xs = []
+        for rho0 in tqdm(rho0s):
+            xs = []
+            for rho1 in tqdm(rho1s):
+                params.set('rho_0', float(rho0))
+                params.set('rho_1', float(rho1))
+                x = momi.loglik(params, bs_jsfs)
+                print(x)
+                xs.append(float(x))
+            Xs.append(xs)
+
+        print(Xs)
+
+
 def f_small_sample_bootstrap():
     loc = lambda i: f"../../../Unified_genome/hgdp_tgp_sgdp_high_cov_ancients_chr{i}_p.dated.trees"
     TS = []
@@ -202,6 +264,17 @@ def f_small_sample_bootstrap():
             pickle.dump(histories, f)
 
 
+def moments5(jsfs):
+    # Model
+    demo = get_demo('pulse')
+    sampled_demes = demo.metadata['sampled_demes']
+    sample_sizes = [i - 1 for i in jsfs.shape]
+    esfs = moments.Spectrum.from_demes(
+        demo, sampled_demes=sampled_demes, sample_sizes=sample_sizes
+    )
+    print(esfs)
+
+
 if __name__ == "__main__":
     # For sending GL_jobs: python bootstrap.py out=/tmp/ mode=send_jobs njobs=50 proc=GPU or (CPU)
     # For sending bootstrap iter: python out=/tmp/ mode=run
@@ -225,7 +298,8 @@ if __name__ == "__main__":
         'njobs': 'None',
         'file_name': 'None',
         'q': '0.99',
-        'batch_size': 'None'
+        'batch_size': 'None',
+        'hess': 'False'
     }
 
     for arg in args:
@@ -270,6 +344,24 @@ if __name__ == "__main__":
     elif mode == 'small_sample_job':
         srun = get_srun('GPU')
         test = f'python train.py mode=small_sample'
+        jobid = srun.run(test)
+        print(f"{jobid}: Sent -- {test}")
+
+    elif mode == 'moments5':
+        jsfs = np.load(data_path)
+        moments5(jsfs)
+    elif mode == 'moments5_job':
+        srun = get_srun('CPU')
+        test = f'python train.py mode=moments5'
+        jobid = srun.run(test)
+        print(f"{jobid}: Sent -- {test}")
+
+    elif mode == 'migration_grid':
+        f_migration_grid(arg_d['hess'] == 'True')
+    elif mode == 'migration_grid_job':
+        srun = get_srun('GPU')
+        hess = arg_d['hess']
+        test = f'python train.py mode=migration_grid hess={hess}'
         jobid = srun.run(test)
         print(f"{jobid}: Sent -- {test}")
     else:

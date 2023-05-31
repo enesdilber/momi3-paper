@@ -1,23 +1,24 @@
 import tskit
 
 import numpy as np
+import sparse
 
 from ast import literal_eval
 from tqdm import trange
 
-loc = lambda i: f"/mnt/turbo/eneswork/Unified_genome//hgdp_tgp_sgdp_high_cov_ancients_chr{i}_p.dated.trees"
-NAME = "UNIF_chr20"
+loc = lambda i: f"/mnt/turbo/eneswork/Unified_genome/hgdp_tgp_sgdp_high_cov_ancients_chr{i}_p.dated.trees"
+NAME = "UNIF"
 
-deme_ids = {'Yoruba': 64, 'French': 16, 'Papuan': 175, 'Vindija': 214, 'Denisovan': 213}
-sampled_demes = ('Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan')
-sample_sizes = {'Yoruba': 300, 'French': 300, 'Papuan': 300, 'Vindija': 300, 'Denisovan': 300}
+deme_ids = {'Yoruba': 64, 'French': 16, 'Papuan': 175, 'Vindija': 214, 'Denisovan': 213, 'CEU': 54}
+sampled_demes = ('Yoruba', 'French', 'Papuan', 'Vindija', 'Denisovan', 'CEU')
+sample_sizes = {'Yoruba': 300, 'French': 300, 'Papuan': 300, 'Vindija': 300, 'Denisovan': 300, 'CEU': 300}
 SEED = 108
 
 p = len(sampled_demes)
 
 np.random.seed(SEED)
 
-for i in trange(20, 21):#3):
+for i in trange(23):#3):
 	try:
 		ts = tskit.load(loc(i))
 		tspops = ts.populations()
@@ -40,4 +41,5 @@ for i in trange(20, 21):#3):
 
 size = np.prod(X.shape)
 x = '_'.join(sampled_demes)
-np.save(f'jsfs_{NAME}_{x}_{size}_{SEED}', X)
+X = sparse.COO(X)
+sparse.save_npz(f'jsfs_{NAME}_{x}_{size}_{SEED}', X)

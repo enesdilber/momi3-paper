@@ -25,7 +25,7 @@ srun = slurm.batch(
     "#nodes=1",
     "#cpus-per-task=1",
     "#mem=16G",
-    "#gpus-per-node=2",
+    "#gpus-per-node=1",
     "#partition=gpu",
     '#job-name="GPU_tests"',
     "module load cudnn",
@@ -71,12 +71,11 @@ def pop8admix():
     return tests
 
 
-
 def IWM():
     tests = []
     Ndemes = [5, 4, 3, 2]
     sample_sizes = [5]
-    methods = ["momi3"]
+    methods = ['dadi']  # ["momi3"]
     for sample_size in sample_sizes:
         for seqlen in SEQ_LENs:
             for ndemes in Ndemes:
@@ -128,7 +127,7 @@ def constant():
 
 
 # tests = ['python time_mig_OOA.py momi3 3 20 100000000.0 /nfs/turbo/lsa-jonth/eneswork/jthlab/momi3-paper/slurm_performance_tests/timing_tests_out/']#constant() + constant_n_large() + IWM()
-tests = pop8admix()  # + pop5admix() + IWM() + IWM_n_large() + constant() + constant_n_large()
+tests = IWM()  # + pop5admix() + IWM() + IWM_n_large() + constant() + constant_n_large()
 
 # tests = [
 #     #'python time_5_pop_admixture.py momi3 25 100000000.0 /nfs/turbo/lsa-jonth/eneswork/jthlab/momi3-paper/slurm_performance_tests/timing_tests_out/',

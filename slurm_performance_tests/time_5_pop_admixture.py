@@ -7,7 +7,7 @@ from momi3.utils import get_CPU_name, get_GPU_name, msprime_chromosome_simulator
 from momi3.MOMI import Momi
 from momi3.Params import Params
 
-from timeit_methods import get_momi_times, get_momi2_times, get_moments_times, Return
+from timeit_methods import get_dadi_times, get_momi_times, get_momi2_times, get_moments_times, Return
 
 from joblib import cpu_count
 
@@ -20,7 +20,7 @@ import momi as momi2
 import autograd.numpy as np
 
 EPS = 0.1
-NUM_REPLICATES = 10
+NUM_REPLICATES = 3
 RANDOM_SEED = 108
 BATCH_SIZE = None
 RR = 1e-8  # Recombination Rate
@@ -156,6 +156,8 @@ if __name__ == "__main__":
     	ret = get_momi2_times(sampled_demes, sample_sizes, jsfs, params, momi2_model, NUM_REPLICATES, loglik_with_grad=True)
     elif method == "moments":
     	ret = get_moments_times(sampled_demes, sample_sizes, jsfs, params, NUM_REPLICATES, loglik_with_grad=True)
+    elif method == "dadi":
+        ret = get_dadi_times(sampled_demes, sample_sizes, jsfs, params, NUM_REPLICATES, loglik_with_grad=True)
     else:
     	raise ValueError(f"Unknown {method=}")
 

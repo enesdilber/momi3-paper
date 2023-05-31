@@ -2,12 +2,14 @@ import sys
 import os
 
 import jax
+jax.config.update('jax_platform_name', 'cpu')
+jax.numpy.arange(10)
 
 from momi3.utils import get_CPU_name, get_GPU_name, msprime_chromosome_simulator
 from momi3.MOMI import Momi
 from momi3.Params import Params
 
-from timeit_methods import get_momi_times, get_moments_times, get_dadi_esfs, Return
+from timeit_methods import get_momi_times, get_moments_times, get_dadi_times, Return
 
 from joblib import cpu_count
 
@@ -15,8 +17,12 @@ import pickle
 import demes
 import hashlib
 
+import pycuda
+import skcuda
+import dadi
+
 EPS = 0.1
-NUM_REPLICATES = 10
+NUM_REPLICATES = 3
 RANDOM_SEED = 108
 RR = 1e-8  # Recombination Rate
 MR = 1e-8  # Mutation Rate
@@ -127,15 +133,20 @@ if __name__ == "__main__":
     elif method == "moments":
         ret = get_moments_times(sampled_demes, sample_sizes, jsfs, params, NUM_REPLICATES, loglik_with_grad=True)
     elif method == "dadi":
-        if len(sampled_demes) > 3:
-            raise ValueError('Cant handle more than 3 pops')
-        else:
-            ret = get_dadi_esfs(sampled_demes, sample_sizes, jsfs, params, pts=GRID_POINTS)
+        # if len(sampled_demes) > 3:
+        #     raise ValueError('Cant handle more than 3 pops')
+        # else:
+        if opts['GPU'] is not None:
+            dadi.cuda_enabled(True)
+            pass
+        ret = get_dadi_times(sampled_demes, sample_sizes, jsfs, params, NUM_REPLICATES, loglik_with_grad=True)
     else:
         raise ValueError(f"Unknown {method=}")
 
     ret = ret | opts
     ret = Return(**ret)
+
+    print(save_path)
 
     with open(save_path, 'wb') as f:
         pickle.dump(ret, f)

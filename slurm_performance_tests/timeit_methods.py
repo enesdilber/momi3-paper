@@ -1,7 +1,8 @@
 import os
 import sys
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "1."
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.05"
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+
 sys.path.append(".")
 
 import demes
@@ -18,7 +19,6 @@ import autograd.numpy as np
 from autograd import grad as auto_grad
 from collections import namedtuple
 from copy import deepcopy
-
 
 Option_keys = [
     'model_name',
@@ -125,6 +125,88 @@ class momi2_timeit:
         }
         sfs = momi2.site_freq_spectrum(self.sampled_demes, [config_list])
         return sfs
+
+
+class dadi_timeit:
+    def __init__(self, sampled_demes, sample_sizes, jsfs, params, num_replicates):
+        demo_dict = params.demo_dict
+        self.EPS = 1e-5
+        self.demo = params.demo_graph
+        self.num_replicates = num_replicates
+        ndemes = len(sampled_demes)
+        n = sample_sizes[0]
+        if ndemes == 5:
+            pts = 30
+        elif ndemes == 4:
+            pts = 80
+        elif ndemes == 3:
+            pts = 50
+        elif ndemes == 2:
+            pts = 50
+        pts = max(pts, n)
+
+        self.pts = pts  # min(max_pts, dadi.RAM_to_pts(1, ndemes))
+
+        keys = list(params._theta_train_path_dict())
+        self.theta_train = np.array(list(params._theta_train_path_dict().values()))
+
+        def get_esfs(demo):
+            esfs = dadi.Spectrum.from_demes(
+                demo, sampled_demes=sampled_demes, sample_sizes=sample_sizes, pts=self.pts
+            )
+            return esfs * 4 * demo.demes[0].epochs[0].start_size
+
+        def loglik(theta_train, jsfs_flatten, demo_dict=demo_dict):
+            demo_dict = deepcopy(demo_dict)
+            theta_train_dict = dict(zip(keys, theta_train))
+
+            for paths, val in theta_train_dict.items():
+                for path in paths:
+                    update(demo_dict, path, float(val))
+
+            demo = demes.Builder.fromdict(demo_dict).resolve()
+            esfs = get_esfs(demo)
+            esfs = np.array(esfs).flatten()[1:-1]
+            data = jsfs_flatten[1:-1]
+            esfs /= esfs.sum()
+            esfs = np.clip(1e-32, np.inf, esfs)
+            return (data * np.log(esfs)).sum()
+
+        self._get_esfs = get_esfs
+        self._loglik = loglik
+
+        def grad(theta_train, jsfs_flatten):
+            # return [loglik(theta_train, jsfs_flatten) for _ in range(2 * len(theta_train))]
+            return approx_fprime(
+                theta_train, loglik, self.EPS, jsfs_flatten
+            )
+        self._grad = grad
+
+    def esfs(self, jsfs):
+        return list(self._get_esfs(self.demo)[tuple(jsfs.coords)])
+
+    def loglik(self, jsfs):
+        jsfs_flatten = self.flatten_jsfs(jsfs)
+        return self._loglik(self.theta_train, jsfs_flatten)
+
+    def grad(self, jsfs):
+        jsfs_flatten = self.flatten_jsfs(jsfs)
+        return self._grad(self.theta_train, jsfs_flatten)
+
+    def time_loglik(self, jsfs):
+        jsfs_flatten = self.flatten_jsfs(jsfs)
+        f = lambda: self._loglik(self.theta_train, jsfs_flatten)
+        run_time = timeit.repeat(f, repeat=self.num_replicates, number=1)
+        return run_time
+
+    def time_grad(self, jsfs):
+        jsfs_flatten = self.flatten_jsfs(jsfs)
+        f = lambda: self._grad(self.theta_train, jsfs_flatten)
+        run_time = timeit.repeat(f, repeat=self.num_replicates, number=1)
+        return run_time
+
+    def flatten_jsfs(self, jsfs):
+        return jsfs.todense().flatten()
 
 
 class dadi_just_esfs:
@@ -346,19 +428,56 @@ def get_moments_times(sampled_demes, sample_sizes, jsfs, params, num_replicates,
     return moments_ret
 
 
-def get_dadi_esfs(sampled_demes, sample_sizes, jsfs, params, pts):
-    dadi_ = dadi_just_esfs(sampled_demes, sample_sizes, params)
+# def get_dadi_esfs(sampled_demes, sample_sizes, jsfs, params, pts, num_replicates):
+#     dadist = dadi_timeit(sampled_demes, sample_sizes, jsfs, params, num_replicates)
 
-    esfs = dadi_.esfs(jsfs, pts)
+#     esfs = dadist.esfs(jsfs, pts)
 
-    dadi_ret = dict(
+#     dadi_ret = dict(
+#         esfs=esfs,
+#         loglik_compilation_time=None,
+#         loglik_time=None,
+#         loglik_with_gradient_compilation_time=None,
+#         loglik_with_gradient_time=None,
+#         likelihood_value=None,
+#         gradient_values=None,
+#     )
+
+#     return dadi_ret
+
+
+def get_dadi_times(sampled_demes, sample_sizes, jsfs, params, num_replicates, loglik_with_grad=True):
+    dadist = dadi_timeit(sampled_demes, sample_sizes, jsfs, params, num_replicates)
+
+    # Get esfs
+
+    def get_esfs_dadi(demo, sampled_demes, sample_sizes, pts):
+        esfs = dadi.Spectrum.from_demes(
+            demo, sampled_demes=sampled_demes, sample_sizes=sample_sizes, pts=pts
+        )
+        return esfs * 4 * demo.demes[0].epochs[0].start_size
+
+    esfs = dadist.esfs(jsfs)
+
+    times = dadist.time_loglik(jsfs)
+
+    if loglik_with_grad:
+        grad_times = dadist.time_grad(jsfs)
+        grad_with_loglik_time = [grad_times[i] + times[i] for i in range(len(times))]
+    else:
+        grad_with_loglik_time = None
+
+    # Get values
+    v = dadist.loglik(jsfs)
+
+    moments_ret = dict(
         esfs=esfs,
         loglik_compilation_time=None,
-        loglik_time=None,
+        loglik_time=times,
         loglik_with_gradient_compilation_time=None,
-        loglik_with_gradient_time=None,
-        likelihood_value=None,
+        loglik_with_gradient_time=grad_with_loglik_time,
+        likelihood_value=v,
         gradient_values=None,
     )
 
-    return dadi_ret
+    return moments_ret
